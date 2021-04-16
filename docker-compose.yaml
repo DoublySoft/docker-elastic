@@ -1,0 +1,171 @@
+version: '3.8'
+
+services:
+
+  elasticsearch01:
+    hostname: ${NAME}-elasticsearch
+    container_name:  ${NAME}-elasticsearch01
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.12.0
+    environment:
+      - node.name=${NAME}-elasticsearch01
+      - cluster.name=es-docker-cluster
+      - discovery.seed_hosts=${NAME}-elasticsearch02,${NAME}-elasticsearch03
+      - cluster.initial_master_nodes=${NAME}-elasticsearch01,${NAME}-elasticsearch02,${NAME}-elasticsearch03
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - ./docker/elasticsearch/data/01:/usr/share/elasticsearch/data
+    ports:
+      - ${ELASTICSEARCH_PORT}:9200
+      - 9300:9300
+    networks: 
+      - elastic
+
+  # elasticsearch02:
+  #   hostname: ${NAME}-elasticsearch
+  #   container_name:  ${NAME}-elasticsearch02
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:7.12.0
+  #   environment:
+  #     - node.name=${NAME}-elasticsearch02
+  #     - cluster.name=es-docker-cluster
+  #     - discovery.seed_hosts=${NAME}-elasticsearch01,${NAME}-elasticsearch03
+  #     - cluster.initial_master_nodes=${NAME}-elasticsearch01,${NAME}-elasticsearch02,${NAME}-elasticsearch03
+  #     - bootstrap.memory_lock=true
+  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+  #   ulimits:
+  #     memlock:
+  #       soft: -1
+  #       hard: -1
+  #   volumes:
+  #     - ./docker/elasticsearch/data/02:/usr/share/elasticsearch/data
+  #   networks: 
+  #     - elastic
+
+  # elasticsearch03:
+  #   hostname: ${NAME}-elasticsearch
+  #   container_name:  ${NAME}-elasticsearch03
+  #   image: docker.elastic.co/elasticsearch/elasticsearch:7.12.0
+  #   environment:
+  #     - node.name=${NAME}-elasticsearch03
+  #     - cluster.name=es-docker-cluster
+  #     - discovery.seed_hosts=${NAME}-elasticsearch01,${NAME}-elasticsearch02
+  #     - cluster.initial_master_nodes=${NAME}-elasticsearch01,${NAME}-elasticsearch02,${NAME}-elasticsearch03
+  #     - bootstrap.memory_lock=true
+  #     - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+  #   ulimits:
+  #     memlock:
+  #       soft: -1
+  #       hard: -1
+  #   volumes:
+  #     - ./docker/elasticsearch/data/03:/usr/share/elasticsearch/data
+  #   networks: 
+  #     - elastic
+
+  kibana:
+    hostname: ${NAME}-kibana
+    container_name: ${NAME}-kibana
+    image: docker.elastic.co/kibana/kibana:7.12.0
+    depends_on: 
+      - elasticsearch01
+      # - elasticsearch02
+      # - elasticsearch03
+    ports:
+      - ${KIBANA_PORT}:5601
+    environment: 
+      ELASTICSEARCH_URL: http://elasticsearch01:9200 
+      # ELASTICSEARCH_HOSTS: '["http://elasticsearch01:9200","http://elasticsearch02:9200","http://elasticsearch03:9200"]'
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch01:9200"]'
+    networks: 
+      - elastic
+
+  # logstash:
+  #   hostname: ${NAME}-logstash
+  #   container_name: ${NAME}-logstash
+  #   image: docker.elastic.co/logstash/logstash:7.12.0
+  #   volumes:
+  #     - ./docker/logstash/config/logstash.yml:/usr/share/logstash/config/logstash.yml
+  #     - ./docker/logstash/pipeline:/usr/share/logstash/pipeline
+  #   ports:
+  #     - 5044:5044
+  #     - "5000:5000/tcp"
+  #     - "5000:5000/udp"
+  #     - 9600:9600
+  #   environment: 
+  #     LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+  #   networks: 
+  #     - elastic
+
+  filebeat:
+    hostname: ${NAME}-filebeat
+    container_name: ${NAME}-filebeat
+    image: docker.elastic.co/beats/filebeat:7.12.0
+    depends_on: 
+      - kibana
+      - elasticsearch01
+    environment: 
+      - setup.kibana.host=kibana:5601
+      - output.elasticsearch.hosts=["elasticsearch01:9200"]
+    networks: 
+      - elastic
+
+  metricbeat:
+    hostname: ${NAME}-metricbeat
+    container_name: ${NAME}-metricbeat
+    image: docker.elastic.co/beats/metricbeat:7.12.0
+    depends_on: 
+      - kibana
+      - elasticsearch01
+    environment: 
+      - setup.kibana.host=kibana:5601
+      - output.elasticsearch.hosts=["elasticsearch01:9200"]
+    networks: 
+      - elastic
+
+  packetbeat:
+    hostname: ${NAME}-packetbeat
+    container_name: ${NAME}-packetbeat
+    image: docker.elastic.co/beats/packetbeat:7.12.0
+    depends_on: 
+      - kibana
+      - elasticsearch01
+    environment: 
+      - setup.kibana.host=kibana:5601
+      - output.elasticsearch.hosts=["elasticsearch01:9200"]
+    networks: 
+      - elastic
+
+  auditbeat:
+    hostname: ${NAME}-auditbeat
+    container_name: ${NAME}-auditbeat
+    image: docker.elastic.co/beats/auditbeat:7.12.0
+    depends_on: 
+      - kibana
+      - elasticsearch01
+    environment: 
+      - setup.kibana.host=kibana:5601
+      - output.elasticsearch.hosts=["elasticsearch01:9200"]
+    volumes: 
+      - ./docker/auditbeat/auditbeat.docker.yml:/usr/share/auditbeat/auditbeat.yml
+    networks: 
+      - elastic
+
+  heartbeat:
+    hostname: ${NAME}-heartbeat
+    container_name: ${NAME}-heartbeat
+    image: docker.elastic.co/beats/heartbeat:7.12.0
+    depends_on: 
+      - kibana
+      - elasticsearch01
+    environment: 
+      - setup.kibana.host=kibana:5601
+      - output.elasticsearch.hosts=["elasticsearch01:9200"]
+    networks: 
+      - elastic
+
+networks:
+  elastic:
+    driver: bridge
